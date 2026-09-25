@@ -1,0 +1,106 @@
+# SwitchLLM example policy.
+#
+# Runs fully offline against the keyless mock provider. Prices are
+# illustrative placeholders -- set them to your negotiated contract rates.
+
+[defaults]
+# What employees use without SwitchLLM -- typically the most expensive
+# setting. It is the baseline every cost receipt is measured against.
+baseline_model = "mock-frontier"
+baseline_effort = "high"
+baseline_mode = "extended_thinking"
+# Verifier confidence below this escalates to the next tier.
+confidence_threshold = 0.7
+# "live" routes traffic; "shadow" serves the baseline and records what
+# routing would have done, so admins see the quality-vs-cost delta first.
+mode = "live"
+# In shadow mode, also execute the routed path to measure its quality.
+shadow_execute_routed = false
+default_role = "general"
+
+[[models]]
+id = "mock-small"
+provider = "mock"
+tier = 1
+input_per_mtok = 0.25
+output_per_mtok = 1.25
+
+[[models]]
+id = "mock-mid"
+provider = "mock"
+tier = 2
+input_per_mtok = 3.0
+output_per_mtok = 15.0
+
+[[models]]
+id = "mock-frontier"
+provider = "mock"
+tier = 3
+input_per_mtok = 15.0
+output_per_mtok = 75.0
+
+# A real deployment points at the company's existing gateway, e.g.:
+#
+# [providers.gateway]
+# type = "openai_compatible"
+# base_url = "https://llm-gateway.internal.example.com/v1"
+# api_key_env = "GATEWAY_API_KEY"
+#
+# [[models]]
+# id = "gw-small"
+# provider = "gateway"
+# name = "provider-model-name"
+# tier = 1
+# input_per_mtok = 0.0
+# output_per_mtok = 0.0
+# supports_effort = true
+
+# Roles. monthly_budget_usd is per user per calendar month.
+[roles.quant_research]
+description = "Quant researchers: frontier access for hard modelling work."
+max_tier = 3
+max_effort = "high"
+monthly_budget_usd = 500
+
+[roles.engineering]
+description = "Software engineers."
+max_tier = 3
+max_effort = "high"
+monthly_budget_usd = 300
+
+[roles.sales]
+description = "Sales: drafting and summarising; no agentic runs."
+max_tier = 2
+max_effort = "medium"
+allowed_modes = ["single", "batch"]
+monthly_budget_usd = 50
+
+[roles.general]
+description = "Everyone else."
+max_tier = 2
+max_effort = "medium"
+allowed_modes = ["single", "batch"]
+monthly_budget_usd = 30
+
+# Quality floors: a task class is never routed below its min_tier, even when
+# the role's cap is lower.
+[task_classes.legal]
+min_tier = 3
+
+[task_classes.code]
+min_tier = 2
+
+[task_classes.math]
+min_tier = 2
+
+# Identity. Production syncs this from Okta / Entra / Slack / Glean.
+# group_roles is checked in order; the first group a user belongs to wins.
+[directory.group_roles]
+"quant-research" = "quant_research"
+"eng-platform" = "engineering"
+"sales-na" = "sales"
+
+[directory.users]
+"alice@acme.com" = ["quant-research"]
+"carol@acme.com" = ["eng-platform"]
+"bob@acme.com" = ["sales-na"]

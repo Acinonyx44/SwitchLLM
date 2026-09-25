@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "switchllm"
+version = "0.1.0"
+description = "Role-based AI control plane: routes each task to the right model, effort level and execution mode under one company policy."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+mcp = ["mcp>=2"]
+dev = ["pytest>=8", "mcp>=2"]
+
+[project.scripts]
+switchllm = "switchllm.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+switchllm = ["example_policy.toml"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
