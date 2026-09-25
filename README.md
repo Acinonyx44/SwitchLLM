@@ -9,6 +9,15 @@ mode, under a budget policy the company writes once.
 Employees get one text box with no dropdowns. IT and FinOps get one policy, one
 audit log, and a cost receipt on every request.
 
+## Demo
+
+Open [`demo/index.html`](demo/index.html) in a browser for the SwitchLLM
+Console, which runs offline. It has three views: **Ask**, where an employee
+sends a request and sees the route and cost receipt; **Policy**, where an
+admin edits the policy in plain English and previews its effect by replaying
+traffic; and **Savings**, a 30-day spend dashboard for the CIO. See
+[`demo/README.md`](demo/README.md).
+
 ## What's in this repo
 
 This repo contains the role-based routing core, runnable offline against a
