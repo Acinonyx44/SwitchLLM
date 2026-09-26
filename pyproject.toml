@@ -21,7 +21,7 @@ switchllm = "switchllm.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-switchllm = ["example_policy.toml"]
+switchllm = ["example_policy.toml", "console/console.html", "console/scenarios.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -1,40 +1,69 @@
 # SwitchLLM Console demo
 
-`index.html` is the SwitchLLM Console. It's a single self-contained page: open
-it in a browser and it works offline, with no server.
+The Console shows SwitchLLM from all three seats:
 
-It has three views:
+- **Ask (employee):** five personas and 13 sample requests. You can also type
+  any request of your own. Each request is classified, checked against the
+  policy for the sender's role, routed to the cheapest model that clears the
+  bar, verified, escalated if needed, and priced on a receipt. The optional
+  compare mode runs the always-frontier default side by side.
+- **Policy (admin):** describe a change in plain English, for example "Cap
+  contractors at $3 a month and block them from code review". SwitchLLM shows
+  the YAML diff and the teams and task types it affects. It then replays 30
+  days of company traffic, about 44,000 requests, to price the change before
+  you apply it.
+- **Savings (CIO):** spend compared with always-frontier by team and task
+  type, budgets month to date, and every request sent from the Ask tab.
 
-- **Ask (employee):** five personas (support agent, quant analyst, engineer,
-  legal counsel, contractor) and 13 sample requests. Each request animates
-  through the steps: classify, apply the role's policy, pick a model tier,
-  verify, escalate if needed, and print a cost receipt. An optional
-  side-by-side run compares the answer and cost against the always-frontier
-  default.
-- **Policy (admin):** a matrix of where each team and task type starts, team
-  budgets, and plain-English policy changes. Each change shows a preview of the
-  YAML diff and a replay of 30 days of traffic priced under the new policy.
-- **Savings (CIO):** 30 days of simulated traffic for a 200-person company:
-  42,725 requests, $612 spent versus $1,378 always-frontier, 55.6% saved.
-  Includes cumulative spend, a breakdown by team and by task type, and every
-  request's receipt.
+## Three ways to show it
 
-There are two model ladders to switch between:
+| Situation | Command | What you get |
+| --- | --- | --- |
+| No setup, no network | Open `demo/index.html` in a browser | Offline replay of the sample requests and policy examples |
+| Laptop demo with your own requests and policy edits | `switchllm demo --open` | The full live engine at http://localhost:8000 with simulated model calls |
+| Real answers from real models | `OPENROUTER_API_KEY=... switchllm demo --live --open` | Real classifier, answer, verifier and compare calls through OpenRouter |
 
-- **Hybrid:** gpt-oss-20b, then gpt-oss-120b, then Claude Opus 5.5.
-- **All open-weights:** gpt-oss-20b, then gpt-oss-120b, then DeepSeek V4 Pro.
+To host it for others, run `switchllm demo --host 0.0.0.0 --port 8000`, or
+use the container:
 
-Prices are OpenRouter list prices from September 2026.
+```bash
+docker build -t switchllm .
+docker run -p 8000:8000 switchllm                                              # simulated models
+docker run -p 8000:8000 -e OPENROUTER_API_KEY=... -e SWITCHLLM_LIVE=1 switchllm # real models
+```
 
-## How it works
+This works on any container host (Render, Fly.io, Railway, Cloud Run). The
+server reads `PORT` from the environment.
 
-The page embeds a replay export (`window.SWITCHLLM_STATIC`) that the demo
-server generated on 2026-09-25. In replay mode, model answers are pre-written
-samples. Classification, policy, routing, verification and costs were computed
-by the engine when the export was generated.
+**Several people at once.** Each browser gets its own session, so viewers can
+change the policy and send requests without affecting each other. Simulated
+traffic and replays are shared, so each extra viewer costs almost nothing.
+Idle sessions expire after 4 hours, and at most 200 are kept.
 
-When `SWITCHLLM_STATIC` is absent, the page talks to a live demo server
-instead, through `/api/meta`, `/api/ask`, `/api/policy`,
-`/api/policy/preview`, `/api/policy/apply`, `/api/dashboard`, `/api/reset`
-and `/api/replay`. It expects that server to be started with
-`uv run switchllm demo`. That server isn't in this repository yet.
+**If the server stops mid-demo,** the page switches to its built-in offline
+replay and offers to reconnect when the server is back.
+
+## What's real and what's simulated
+
+Classification rules, policy resolution, routing, verification and
+escalation logic, receipts, the policy parser, the traffic replay and the
+dashboards all run in the engine (`src/switchllm/console/`).
+
+In simulated mode:
+- Model answers to the sample requests are pre-written.
+- Typed-in requests get a placeholder answer that says so.
+- Token counts are modelled from prompt and answer length.
+- The 30 days of company traffic are generated, not observed.
+
+In live mode, the classifier, the answers, the verifier and the compare run
+are real model calls. If a call fails, the page says so and falls back to
+simulation for that request.
+
+Prices are OpenRouter list prices as of September 2026 and live in
+`src/switchllm/console/engine.py`.
+
+To regenerate the offline page after changing the engine:
+
+```bash
+switchllm demo --export demo/index.html
+```

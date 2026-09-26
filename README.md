@@ -11,12 +11,21 @@ audit log, and a cost receipt on every request.
 
 ## Demo
 
-Open [`demo/index.html`](demo/index.html) in a browser for the SwitchLLM
-Console, which runs offline. It has three views: **Ask**, where an employee
-sends a request and sees the route and cost receipt; **Policy**, where an
-admin edits the policy in plain English and previews its effect by replaying
-traffic; and **Savings**, a 30-day spend dashboard for the CIO. See
-[`demo/README.md`](demo/README.md).
+```bash
+pip install -e . && switchllm demo --open      # live engine, simulated models
+OPENROUTER_API_KEY=... switchllm demo --live   # real models
+```
+
+The SwitchLLM Console has three views:
+- **Ask:** an employee sends a request and sees how it was routed and what it
+  cost.
+- **Policy:** an admin edits the policy in plain English and previews the
+  change against 30 days of replayed traffic.
+- **Savings:** a spend dashboard for the CIO.
+
+For a demo with no setup, open [`demo/index.html`](demo/index.html), which
+works offline. The Docker image hosts the Console for many simultaneous
+viewers. See [`demo/README.md`](demo/README.md).
 
 ## What's in this repo
 

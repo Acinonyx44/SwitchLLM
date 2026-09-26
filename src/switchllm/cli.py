@@ -34,12 +34,24 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("mcp", help="serve the MCP connector over stdio (reads SWITCHLLM_USER)")
 
+    demo = sub.add_parser("demo", help="run the SwitchLLM Console (Ask / Policy / Savings) in the browser")
+    demo.add_argument("--host", default=os.environ.get("HOST", "127.0.0.1"),
+                      help="bind address; use 0.0.0.0 to host it for others")
+    demo.add_argument("--port", type=int, default=int(os.environ.get("PORT", 8000)))
+    demo.add_argument("--live", action="store_true",
+                      help="call real models through OpenRouter (needs OPENROUTER_API_KEY)")
+    demo.add_argument("--open", action="store_true", help="open the browser")
+    demo.add_argument("--export", metavar="PATH", help="write a self-contained offline page and exit")
+
     args = parser.parse_args(argv)
 
     if args.command == "mcp":
         from .mcp_server import main as mcp_main
         mcp_main()
         return 0
+
+    if args.command == "demo":
+        return _demo(args)
 
     engine = SwitchLLM.from_files(args.policy, args.audit_log)
 
@@ -64,6 +76,29 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(data, indent=2) if args.json else _format_report(data))
         return 0
     return 1
+
+
+def _demo(args: argparse.Namespace) -> int:
+    from .console.engine import ConsoleEngine
+    from .console.server import page_html, serve
+
+    if args.export:
+        with open(args.export, "w") as f:
+            f.write(page_html(ConsoleEngine().export()))
+        print(f"wrote {args.export}")
+        return 0
+    factory = ConsoleEngine
+    if args.live:
+        from .console.live import LiveClient
+
+        key = os.environ.get("OPENROUTER_API_KEY")
+        if not key:
+            print("--live needs OPENROUTER_API_KEY", file=sys.stderr)
+            return 2
+        client = LiveClient(key, os.environ.get("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"))
+        factory = lambda: ConsoleEngine(live_client=client)  # noqa: E731
+    serve(args.host, args.port, factory, open_browser=args.open)
+    return 0
 
 
 def _chat(engine: SwitchLLM, user: str) -> int:
