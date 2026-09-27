@@ -1,0 +1,353 @@
+{
+ "personas": [
+  {
+   "id": "priya",
+   "name": "Priya Raman",
+   "role": "support_agent",
+   "title": "Support agent",
+   "team": "Customer Support",
+   "initials": "PR"
+  },
+  {
+   "id": "marcus",
+   "name": "Marcus Hale",
+   "role": "analyst",
+   "title": "Quant analyst",
+   "team": "Research",
+   "initials": "MH"
+  },
+  {
+   "id": "dana",
+   "name": "Dana Okafor",
+   "role": "engineer",
+   "title": "Software engineer",
+   "team": "Platform",
+   "initials": "DO"
+  },
+  {
+   "id": "leo",
+   "name": "Leo Martins",
+   "role": "legal",
+   "title": "Legal counsel",
+   "team": "Legal",
+   "initials": "LM"
+  },
+  {
+   "id": "sam",
+   "name": "Sam Ito",
+   "role": "contractor",
+   "title": "Contractor",
+   "team": "External vendor",
+   "initials": "SI"
+  }
+ ],
+ "scenarios": [
+  {
+   "id": "double-charge",
+   "persona": "priya",
+   "label": "Customer reply",
+   "shows": "Routine reply → cheapest model, one call, no verifier",
+   "task": "Reply to this customer: \"I was charged twice for my September invoice. Can you fix this?\"",
+   "task_class": "customer_reply"
+  },
+  {
+   "id": "prorated-refund",
+   "persona": "priya",
+   "label": "Refund math",
+   "shows": "Cheap model gets it wrong → verifier catches it → escalates",
+   "task": "A customer bought our $240 annual plan on Jan 15, 2026 and cancelled on Apr 20, 2026. Refunds are pro-rated by day. How much do we refund?",
+   "task_class": "quantitative_reasoning"
+  },
+  {
+   "id": "angry-customer",
+   "persona": "priya",
+   "label": "Angry customer",
+   "shows": "Role rule lifts escalations to a stronger model, verified",
+   "task": "A customer says they'll post on social media unless their $1,200 dispute is resolved today. Our records show the charge is legitimate. Draft a reply.",
+   "task_class": "customer_escalation"
+  },
+  {
+   "id": "sharpe",
+   "persona": "marcus",
+   "label": "Sharpe ratio",
+   "shows": "Analyst rule sets a medium floor and high effort, verified",
+   "task": "A portfolio returned 12% with 16% volatility and the risk-free rate is 3%. What is the Sharpe ratio, and is it good?",
+   "task_class": "quantitative_reasoning"
+  },
+  {
+   "id": "earnings-summary",
+   "persona": "marcus",
+   "label": "Earnings summary",
+   "shows": "Summaries run on the cheapest model at low effort",
+   "task": "Summarize this earnings note in two sentences: Q3 revenue rose 12% YoY to $4.2B, driven by cloud (+31%). Hardware fell 6%. Operating margin expanded to 24% from 21%. Guidance raised; $2B buyback announced; FX headwinds may cut Q4 growth by ~2 points.",
+   "task_class": "summarize"
+  },
+  {
+   "id": "valuation",
+   "persona": "marcus",
+   "label": "Valuation",
+   "shows": "High-stakes class → frontier floor with extended thinking",
+   "task": "Revenue $50M, gross margin 60%, opex $25M, net debt $10M; peers trade at 15x EBITDA. Estimate enterprise value and equity value.",
+   "task_class": "financial_analysis"
+  },
+  {
+   "id": "merge-intervals",
+   "persona": "dana",
+   "label": "Write a function",
+   "shows": "Engineer rule → mid-tier model at high effort, verified",
+   "task": "Write a Python function merge_intervals(intervals) that merges overlapping intervals, with a few tests.",
+   "task_class": "code_generate"
+  },
+  {
+   "id": "sql-injection",
+   "persona": "dana",
+   "label": "Security review",
+   "shows": "Code review is floored at the frontier model with extended thinking",
+   "task": "Review this for security issues: cur.execute(f\"SELECT * FROM users WHERE name = '{username}'\")",
+   "task_class": "code_review"
+  },
+  {
+   "id": "regex",
+   "persona": "dana",
+   "label": "Explain a regex",
+   "shows": "Simple explanation → cheapest model, one call",
+   "task": "What does this regex match? ^\\+?[1-9]\\d{1,14}$",
+   "task_class": "code_explain"
+  },
+  {
+   "id": "liability-cap",
+   "persona": "leo",
+   "label": "Liability clause",
+   "shows": "Legal work gets the frontier model with extended thinking",
+   "task": "Explain the risk to us in this clause: \"Vendor's total liability shall not exceed the fees paid by Customer in the twelve (12) months preceding the claim.\"",
+   "task_class": "legal_clause_analysis"
+  },
+  {
+   "id": "policy-summary",
+   "persona": "leo",
+   "label": "One-line summary",
+   "shows": "Same class as Marcus's summary, but legal's role floor lifts it",
+   "task": "Summarize for managers in one sentence: all contractors must complete security training within 30 days, use company-managed devices for customer data, and report lost devices within 24 hours.",
+   "task_class": "summarize"
+  },
+  {
+   "id": "vendor-email",
+   "persona": "sam",
+   "label": "Vendor email",
+   "shows": "Contractors are capped at the mid tier; email runs on the cheapest",
+   "task": "Draft a short email asking the vendor to resend the Q3 invoice with our PO number.",
+   "task_class": "draft_email"
+  },
+  {
+   "id": "blocked-valuation",
+   "persona": "sam",
+   "label": "Valuation (blocked)",
+   "shows": "Contractors can't run financial analysis, so the request is blocked",
+   "task": "Build a quick valuation of our acquisition target using a 15x EBITDA multiple.",
+   "task_class": "financial_analysis"
+  }
+ ],
+ "policy_examples": [
+  "Engineers only need medium effort for code generation",
+  "Code reviews can start on the medium model and escalate if needed",
+  "Analysts always get the frontier model with extended thinking for quantitative reasoning",
+  "Cap contractors at $3 a month and block them from code review"
+ ],
+ "role_labels": {
+  "default": "Everyone else",
+  "analyst": "Analysts",
+  "engineer": "Engineers",
+  "support_agent": "Support agents",
+  "legal": "Legal",
+  "executive": "Executives",
+  "contractor": "Contractors"
+ },
+ "headcount": {
+  "support_agent": 60,
+  "engineer": 50,
+  "analyst": 30,
+  "contractor": 25,
+  "default": 15,
+  "legal": 10,
+  "executive": 10
+ },
+ "samples": {
+  "double-charge": {
+   "answer": "Hi there,\n\nThanks for flagging this, and I'm sorry about the double charge on your September invoice. I've submitted a refund for the duplicate payment. Depending on your bank, it should appear on your statement within 5–7 business days.\n\nYour subscription isn't affected. If the refund hasn't arrived by then, reply to this email and I'll follow up with our billing team right away.\n\nBest,\nPriya\nCustomer Support",
+   "difficulty": "small",
+   "min_tier": "small",
+   "fail_issues": {},
+   "pass_score": null,
+   "compare": {
+    "answer": "Hi,\n\nI'm sorry you were charged twice for your September invoice; that shouldn't happen. I've confirmed the duplicate payment and issued a full refund for the second charge. Most banks post refunds within 5–7 business days.\n\nNothing else changes on your account, and you won't be billed again until your next renewal date. If you don't see the refund within a week, reply here and I'll chase it with our billing team personally.\n\nBest regards,\nPriya\nCustomer Support",
+    "scores": {
+     "route": 90,
+     "frontier": 92
+    }
+   }
+  },
+  "prorated-refund": {
+   "answer": "Refunds are pro-rated by day.\n\n- Days used, Jan 15 → Apr 20, 2026: 16 + 28 + 31 + 20 = **95 days**\n- Days remaining: 365 − 95 = **270 days**\n- Refund: $240 × 270 / 365 = **$177.53**",
+   "difficulty": "small",
+   "min_tier": "medium",
+   "fail_issues": {
+    "small": "Refunds are pro-rated by day, not by month: Jan 15 → Apr 20 is 95 days used, so 270 of 365 days remain and the refund is $177.53, not $180."
+   },
+   "pass_score": 90,
+   "compare": {
+    "answer": "**Refund: $177.53**\n\n- Plan length: 365 days (Jan 15, 2026 → Jan 15, 2027; not a leap year)\n- Days used: Jan 15 → Apr 20 = 95 days (16 in January, 28 in February, 31 in March, 20 in April)\n- Days remaining: 270\n- $240 × 270 / 365 = $177.534…, rounded to $177.53",
+    "scores": {
+     "route": 95,
+     "frontier": 96
+    }
+   }
+  },
+  "angry-customer": {
+   "answer": "Hi,\n\nThank you for reaching out, and I understand how frustrating a disputed charge is. I've reviewed your account: the $1,200 charge is the annual renewal of your plan, processed under the auto-renewal terms on your subscription, and we sent a renewal reminder beforehand.\n\nI want to resolve this with you today. I've sent you the itemized invoice and the renewal notice, and I've asked our billing lead to review your case this afternoon. If there are circumstances we should consider, reply here or pick a time for a call and I'll join it.\n\nBest regards,\nPriya",
+   "difficulty": "medium",
+   "min_tier": "medium",
+   "fail_issues": {},
+   "pass_score": 90,
+   "compare": {
+    "answer": "Hi,\n\nI'm sorry this has been so frustrating, and thank you for giving us the chance to sort it out. I've looked into your account: the $1,200 charge is your plan's annual renewal, which went through under the auto-renewal terms, and a reminder was emailed before it processed.\n\nHere's what I've done today: I've sent you the invoice and the reminder we emailed, and I've escalated your case to our billing lead for review before end of day. If the renewal didn't reflect what you intended, tell me what happened and I'll make sure it's considered.\n\nKind regards,\nPriya",
+    "scores": {
+     "route": 91,
+     "frontier": 93
+    }
+   }
+  },
+  "sharpe": {
+   "answer": "**Sharpe ratio = (12% − 3%) / 16% ≈ 0.56**\n\nThat's modest. Rough benchmarks:\n- below 0.5: weak risk-adjusted return\n- 0.5–1.0: acceptable, typical of a diversified long-only equity portfolio\n- above 1.0: good; above 2.0 is rare and deserves scrutiny\n\nTwo caveats: the ratio treats upside and downside volatility the same, and it's only comparable across portfolios measured over the same period and return frequency.",
+   "difficulty": "small",
+   "min_tier": "medium",
+   "fail_issues": {},
+   "pass_score": 90,
+   "compare": {
+    "answer": "**Sharpe = (12% − 3%) / 16% ≈ 0.56.**\n\nThat's a moderate risk-adjusted return. Broad equity indices have historically run around 0.3–0.6 over long periods, so 0.56 is respectable for a long-only portfolio but unremarkable for a hedge fund, where investors usually look for 1.0 or more.\n\nBefore comparing, make sure return and volatility are annualized over the same window, and look at the Sortino ratio if returns are skewed.",
+    "scores": {
+     "route": 92,
+     "frontier": 93
+    }
+   }
+  },
+  "earnings-summary": {
+   "answer": "Q3 revenue grew 12% year over year to $4.2B on 31% cloud growth, offsetting a 6% decline in hardware, and operating margin widened to 24% from 21%. Management raised guidance and announced a $2B buyback, but warned currency headwinds could trim about 2 points from Q4 growth.",
+   "difficulty": "small",
+   "min_tier": "small",
+   "fail_issues": {},
+   "pass_score": null,
+   "compare": {
+    "answer": "Revenue rose 12% to $4.2B in Q3, powered by 31% cloud growth that more than offset a 6% drop in hardware, while operating margin expanded three points to 24%. Management raised full-year guidance and authorized a $2B buyback, though currency headwinds may shave roughly two points off Q4 growth.",
+    "scores": {
+     "route": 90,
+     "frontier": 92
+    }
+   }
+  },
+  "valuation": {
+   "answer": "**Enterprise value ≈ $75M; equity value ≈ $65M.**\n\n- Gross profit = 60% × $50M = $30M\n- EBITDA ≈ $30M − $25M opex = **$5M** (assumes opex excludes D&A; if it includes D&A, add it back)\n- EV = 15 × $5M = **$75M**\n- Equity value = EV − net debt = $75M − $10M = **$65M**\n\nSanity check: EV/revenue is 1.5x, low for a 60% gross-margin business because the 10% EBITDA margin is thin. If peers run higher margins, cross-check with a revenue multiple or a margin-normalized EBITDA.",
+   "difficulty": "medium",
+   "min_tier": "large",
+   "fail_issues": {},
+   "pass_score": 90,
+   "compare": {
+    "answer": "**Enterprise value ≈ $75M; equity value ≈ $65M.**\n\n- Gross profit = 60% × $50M = $30M\n- EBITDA ≈ $30M − $25M opex = **$5M** (assumes opex excludes D&A; if it includes D&A, add it back)\n- EV = 15 × $5M = **$75M**\n- Equity value = EV − net debt = $75M − $10M = **$65M**\n\nSanity check: EV/revenue is 1.5x, low for a 60% gross-margin business because the 10% EBITDA margin is thin. If peers run higher margins, cross-check with a revenue multiple or a margin-normalized EBITDA.",
+    "scores": {
+     "route": 94,
+     "frontier": 94
+    }
+   }
+  },
+  "merge-intervals": {
+   "answer": "```python\ndef merge_intervals(intervals):\n    \"\"\"Merge overlapping [start, end] intervals; returns them sorted.\"\"\"\n    merged = []\n    for start, end in sorted(intervals):\n        if merged and start <= merged[-1][1]:\n            merged[-1][1] = max(merged[-1][1], end)\n        else:\n            merged.append([start, end])\n    return merged\n\n\ndef test_merge_intervals():\n    assert merge_intervals([[1, 3], [2, 6], [8, 10], [15, 18]]) == [[1, 6], [8, 10], [15, 18]]\n    assert merge_intervals([[1, 4], [4, 5]]) == [[1, 5]]          # touching intervals merge\n    assert merge_intervals([[5, 7], [1, 2]]) == [[1, 2], [5, 7]]  # unsorted input\n    assert merge_intervals([]) == []\n```\n\nSorting makes it O(n log n); the merge pass is linear.",
+   "difficulty": "medium",
+   "min_tier": "medium",
+   "fail_issues": {},
+   "pass_score": 90,
+   "compare": {
+    "answer": "```python\nfrom typing import List\n\n\ndef merge_intervals(intervals: List[List[int]]) -> List[List[int]]:\n    \"\"\"Merge overlapping or touching [start, end] intervals, sorted by start.\"\"\"\n    merged: List[List[int]] = []\n    for start, end in sorted(intervals):\n        if merged and start <= merged[-1][1]:\n            merged[-1][1] = max(merged[-1][1], end)\n        else:\n            merged.append([start, end])\n    return merged\n\n\ndef test_merge_intervals():\n    assert merge_intervals([[1, 3], [2, 6], [8, 10], [15, 18]]) == [[1, 6], [8, 10], [15, 18]]\n    assert merge_intervals([[1, 4], [4, 5]]) == [[1, 5]]\n    assert merge_intervals([[5, 7], [1, 2]]) == [[1, 2], [5, 7]]\n    assert merge_intervals([[1, 10], [2, 3]]) == [[1, 10]]   # nested interval\n    assert merge_intervals([]) == []\n```\n\nO(n log n) for the sort, O(n) for the sweep. The input list isn't mutated.",
+    "scores": {
+     "route": 94,
+     "frontier": 95
+    }
+   }
+  },
+  "sql-injection": {
+   "answer": "**Critical: SQL injection.** The query is built with an f-string, so a username like `' OR '1'='1` returns every row, and crafted input can run arbitrary SQL.\n\nFix it with a parameterized query so the driver handles escaping:\n\n```python\ncur.execute(\"SELECT * FROM users WHERE name = ?\", (username,))   # sqlite3; use %s for psycopg\n```\n\nAlso:\n- Select only the columns you need instead of `*`, so password hashes and tokens aren't loaded by default.\n- Validate username length and characters at the API boundary.\n- Connect with a database role that can't change the schema.",
+   "difficulty": "medium",
+   "min_tier": "large",
+   "fail_issues": {},
+   "pass_score": 90,
+   "compare": {
+    "answer": "**Critical: SQL injection.** The query is built with an f-string, so a username like `' OR '1'='1` returns every row, and crafted input can run arbitrary SQL.\n\nFix it with a parameterized query so the driver handles escaping:\n\n```python\ncur.execute(\"SELECT * FROM users WHERE name = ?\", (username,))   # sqlite3; use %s for psycopg\n```\n\nAlso:\n- Select only the columns you need instead of `*`, so password hashes and tokens aren't loaded by default.\n- Validate username length and characters at the API boundary.\n- Connect with a database role that can't change the schema.",
+    "scores": {
+     "route": 95,
+     "frontier": 95
+    }
+   }
+  },
+  "regex": {
+   "answer": "It matches phone numbers in E.164 format:\n\n- `^\\+?` an optional leading plus sign\n- `[1-9]` a first digit that isn't 0 (country codes never start with 0)\n- `\\d{1,14}` one to fourteen more digits\n- `$` end of the string\n\nSo it accepts 2 to 15 digits in total, like `+14155552671`. It rejects spaces, dashes and parentheses, so normalize input before validating.",
+   "difficulty": "small",
+   "min_tier": "small",
+   "fail_issues": {},
+   "pass_score": null,
+   "compare": {
+    "answer": "It validates phone numbers in E.164 international format: an optional `+`, a first digit from 1–9 (no leading zero), then 1–14 more digits, for 2–15 digits in total. `+442071838750` passes; `+1 (415) 555-2671` fails because of the spaces and punctuation, so strip formatting first.",
+    "scores": {
+     "route": 91,
+     "frontier": 92
+    }
+   }
+  },
+  "liability-cap": {
+   "answer": "**What it means:** the vendor's liability for any claim is capped at what you paid them in the 12 months before the claim.\n\n**Risk to us:**\n- **The cap can be small next to the harm.** A data breach or long outage can cost far more than a year of fees, and anything above the cap is unrecoverable.\n- **The cap moves.** Early in the contract, or after a price cut, 12 months of fees may be well below the contract's value.\n- **No carve-outs.** As written, the cap also covers confidentiality breaches, data-protection violations, IP infringement, and gross negligence or wilful misconduct.\n\n**Suggested redline:** exclude those categories from the cap (or give them a separate, higher cap such as 3× annual fees), and make the cap the greater of 12 months' fees or a fixed dollar floor.",
+   "difficulty": "large",
+   "min_tier": "large",
+   "fail_issues": {},
+   "pass_score": 90,
+   "compare": {
+    "answer": "**What it means:** the vendor's liability for any claim is capped at what you paid them in the 12 months before the claim.\n\n**Risk to us:**\n- **The cap can be small next to the harm.** A data breach or long outage can cost far more than a year of fees, and anything above the cap is unrecoverable.\n- **The cap moves.** Early in the contract, or after a price cut, 12 months of fees may be well below the contract's value.\n- **No carve-outs.** As written, the cap also covers confidentiality breaches, data-protection violations, IP infringement, and gross negligence or wilful misconduct.\n\n**Suggested redline:** exclude those categories from the cap (or give them a separate, higher cap such as 3× annual fees), and make the cap the greater of 12 months' fees or a fixed dollar floor.",
+    "scores": {
+     "route": 95,
+     "frontier": 95
+    }
+   }
+  },
+  "policy-summary": {
+   "answer": "Contractors must finish security training within 30 days, handle customer data only on company-managed devices, and report any lost device within 24 hours.",
+   "difficulty": "small",
+   "min_tier": "medium",
+   "fail_issues": {},
+   "pass_score": null,
+   "compare": {
+    "answer": "Every contractor has 30 days to complete security training, may access customer data only from company-managed devices, and must report a lost device within 24 hours.",
+    "scores": {
+     "route": 92,
+     "frontier": 93
+    }
+   }
+  },
+  "vendor-email": {
+   "answer": "Subject: Q3 invoice: please resend with our PO number\n\nHi,\n\nCould you please resend the Q3 invoice with our purchase order number included? Our finance team needs the PO on the invoice to process payment.\n\nThanks very much,\nSam",
+   "difficulty": "small",
+   "min_tier": "small",
+   "fail_issues": {},
+   "pass_score": null,
+   "compare": {
+    "answer": "Subject: Request to reissue Q3 invoice with PO number\n\nHello,\n\nWe received your Q3 invoice, thank you. To process payment, our accounts payable team needs our purchase order number shown on it. Could you reissue the invoice with the PO number included?\n\nMany thanks,\nSam",
+    "scores": {
+     "route": 90,
+     "frontier": 91
+    }
+   }
+  },
+  "blocked-valuation": {
+   "answer": "",
+   "difficulty": "large",
+   "min_tier": null,
+   "fail_issues": {},
+   "pass_score": null
+  }
+ }
+}
