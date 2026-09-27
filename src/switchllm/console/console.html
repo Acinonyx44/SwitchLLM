@@ -461,6 +461,22 @@ details summary { cursor: pointer; font-size: 12.5px; color: var(--ink-2); }
 .toast { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--btn-bg); color: var(--btn-fg); padding: 9px 14px; border-radius: 9px; font-size: 13px; box-shadow: var(--shadow); z-index: 60; max-width: calc(100vw - 32px); }
 .foot { margin-top: 28px; padding-top: 14px; border-top: 1px solid var(--line); font-size: 12px; color: var(--ink-3); display: grid; gap: 4px; }
 .foot p { margin: 0; max-width: 110ch; }
+.feedback { border-top: 1px solid var(--line); padding: 12px 18px 16px; display: grid; gap: 10px; }
+.fb-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; color: var(--ink-2); }
+.fb-btn { border: 1px solid var(--line-2); background: var(--surface); border-radius: 999px; padding: 5px 12px; font-size: 12.5px; color: var(--ink-2); }
+.fb-btn:hover { color: var(--ink); border-color: var(--ink-3); }
+.fb-btn[aria-pressed="true"] { background: var(--ink); color: var(--btn-fg); border-color: var(--ink); }
+.fb-offer { display: grid; gap: 8px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 9px; padding: 10px 12px; font-size: 13px; }
+.fb-offer input { border: 1px solid var(--line-2); border-radius: 7px; padding: 7px 10px; background: var(--surface); min-width: 0; }
+.fb-offer .fb-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.appr { display: grid; gap: 10px; }
+.appr-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 12px; padding: 10px 0; border-top: 1px solid var(--line); font-size: 13px; }
+.appr-item:first-child { border-top: 0; padding-top: 0; }
+.appr-item .what { min-width: 0; }
+.appr-item .what b { font-weight: 600; }
+.appr-item .what span { display: block; color: var(--ink-3); font-size: 12px; }
+.appr-item .acts { display: flex; gap: 6px; align-items: start; }
+.appr-item .acts button { padding: 5px 10px; font-size: 12.5px; }
 .linkish { border: 0; background: none; padding: 0; color: var(--ink-2); text-decoration: underline; text-underline-offset: 2px; font-size: 12.5px; }
 
 @media (prefers-reduced-motion: reduce) {
@@ -555,6 +571,7 @@ details summary { cursor: pointer; font-size: 12.5px; color: var(--ink-2); }
               </div>
               <div class="answer" id="answer"></div>
               <p class="sample-note" id="sample-note" hidden></p>
+              <div class="feedback" id="feedback" hidden aria-live="polite"></div>
             </section>
             <section class="receipt" id="receipt" aria-label="Cost receipt"></section>
           </div>
@@ -607,6 +624,10 @@ details summary { cursor: pointer; font-size: 12.5px; color: var(--ink-2); }
               <div class="card-body"><ol class="history" id="history"></ol></div>
             </section>
           </div>
+          <section class="card" aria-label="Override requests">
+            <div class="card-head"><h2>Override requests</h2><span class="muted" style="font-size:12px" id="appr-count"></span></div>
+            <div class="card-body"><div class="appr" id="approvals"></div></div>
+          </section>
         </div>
       </div>
     </section>
@@ -772,6 +793,10 @@ function liveApi() {
     dashboard: () => j("GET", "/api/dashboard"),
     reset: ladder => j("POST", "/api/reset", {ladder}, {timeout: 60000}),
     replay: () => j("GET", "/api/replay", null, {timeout: 20000}),
+    feedback: (receipt_id, liked) => j("POST", "/api/feedback", {receipt_id, liked}),
+    override: (receipt_id, reason) => j("POST", "/api/override", {receipt_id, reason}, {timeout: live() ? 200000 : 30000}),
+    approvals: () => j("GET", "/api/approvals"),
+    decide: (id, approve, approver) => j("POST", "/api/approvals/decide", {id, approve, approver}, {timeout: live() ? 200000 : 30000}),
   };
 }
 
@@ -798,6 +823,10 @@ function staticApi(data, startLadder, fallback) {
     dashboard: async () => copy(L().dashboard),
     reset: async l => { if (l) ladder = l; return copy(L().meta); },
     replay: async () => data,
+    feedback: async (receipt_id, liked) => ({receipt_id, liked, option: null, static: true}),
+    override: async () => { throw new Error("Overrides run in the local demo: switchllm demo"); },
+    approvals: async () => [],
+    decide: async () => { throw new Error("Approvals run in the local demo: switchllm demo"); },
   };
 }
 
@@ -1032,6 +1061,7 @@ async function playRoute(res, animate, token = S.runToken) {
   $("#src-avatar").textContent = p.initials; $("#src-name").innerHTML = `${esc(p.name)}<small>${esc(p.title)}</small>`;
   $("#src").classList.remove("blocked"); $("#board").classList.remove("blocked");
   $("#answer-meta").innerHTML = ""; $("#answer").innerHTML = ""; $("#sample-note").hidden = true;
+  $("#feedback").hidden = true; $("#feedback").innerHTML = "";
   $("#receipt").innerHTML = "";
   $("#compare-card").hidden = true;
   const steps = $("#steps"); steps.innerHTML = "";
@@ -1079,6 +1109,12 @@ async function playRoute(res, animate, token = S.runToken) {
   const layers = (r.applied || []).map(l => `<code>${esc(l)}</code>`).join(" › ");
   add("Policy", `${esc(roleLabel(res.role))}: ${plan.floor === plan.ceiling ? `${esc(TIER_NAME[plan.floor])} only` : `${esc(TIER_NAME[plan.floor])} to ${esc(TIER_NAME[plan.ceiling])}`} · ${esc(plan.effort)} effort · ${esc(EXEC_NAME[plan.execution])}${plan.verify ? " · verified" : " · no verifier"}<span class="layers">${layers}</span>`);
   if (animate) { await sleep(420); if (!alive()) return; }
+  if (r.override) {
+    add("Override", `<span class="status good">${ICON.ok} ${r.override.kind === "manager" ? `Approved by ${esc(r.override.by || "a manager")}` : "Re-run requested by the employee"}</span>${r.override.reason ? ` <span class="muted">“${esc(r.override.reason)}”</span>` : ""}`);
+  } else if (res.pacing) {
+    const paced = res.pacing.action !== "none";
+    add("Budget", `${paced ? `<span class="status warn">${ICON.no} Pacing</span> ` : ""}${esc(res.pacing.message)} <span class="layers">day ${res.pacing.day} of ${res.pacing.days} · ${usd(res.pacing.spent)} spent so far</span>`);
+  }
 
   // attempts: cable per attempt, rejected ones re-patched
   const attempts = r.attempts && r.attempts.length ? r.attempts : [{model: r.final_model, tier: r.final_tier, effort: plan.effort, passed: r.passed}];
@@ -1114,7 +1150,7 @@ async function playRoute(res, animate, token = S.runToken) {
   add("Receipt", `${usdReq(r.cost_usd)} vs ${usdReq(r.baseline_cost_usd)} on ${esc(r.baseline_model)} → <b>${pct(r.baseline_cost_usd ? (1 - r.cost_usd / r.baseline_cost_usd) * 100 : 0)} saved</b>`);
 
   // answer
-  $("#answer-meta").innerHTML = `${tierChip(r.final_tier, r.final_model)}<span class="chip">${esc(plan.effort)} effort</span><span class="chip">${esc(EXEC_NAME[plan.execution])}</span>`;
+  $("#answer-meta").innerHTML = `${tierChip(r.final_tier, r.final_model)}<span class="chip">${esc(plan.effort)} effort</span><span class="chip">${esc(EXEC_NAME[plan.execution])}</span>${r.override ? `<span class="chip">override</span>` : ""}`;
   $("#answer").innerHTML = md(res.answer);
   const note = $("#sample-note");
   if (res.answer_kind === "sample") { note.hidden = false; note.textContent = "Sample answer: this demo is running offline, so model calls are simulated. Classification, policy, routing, verification and costs come from the real engine, priced at OpenRouter list prices."; }
@@ -1122,6 +1158,81 @@ async function playRoute(res, animate, token = S.runToken) {
   else if (res.answer_kind === "fallback") { note.hidden = false; note.textContent = `The live model call failed (${res.fallback_reason || "unknown error"}), so this answer comes from the offline simulation. Routing and the receipt are still computed by the engine.`; }
   renderReceipt(res, animate);
   if (res.compare) renderCompare(res);
+  renderFeedback(res);
+}
+
+/* ------------------------------------------------------------------ feedback and overrides */
+function renderFeedback(res) {
+  const box = $("#feedback");
+  const id = res.receipt && res.receipt.id;
+  if (!id || res.status !== "ok") { box.hidden = true; return; }
+  box.hidden = false;
+  box.innerHTML = `<div class="fb-row"><span>Was this answer good enough?</span>
+    <button class="fb-btn" type="button" data-liked="1" aria-pressed="false">Yes</button>
+    <button class="fb-btn" type="button" data-liked="0" aria-pressed="false">No, needs a stronger model</button></div>
+    <div id="fb-detail"></div>`;
+  for (const b of $$(".fb-btn", box)) b.addEventListener("click", () => sendFeedback(res, b.dataset.liked === "1"));
+}
+
+async function sendFeedback(res, liked) {
+  $$("#feedback .fb-btn").forEach(b => b.setAttribute("aria-pressed", String((b.dataset.liked === "1") === liked)));
+  const detail = $("#fb-detail");
+  let fb;
+  try { fb = await api.feedback(res.receipt.id, liked); }
+  catch (e) { detail.innerHTML = `<p class="muted" style="margin:0">${esc(e.message)}</p>`; return; }
+  S.dash = null;
+  if (liked) { detail.innerHTML = `<p class="muted" style="margin:0">Thanks. Feedback is logged with the receipt and trains the router.</p>`; return; }
+  if (fb.static) { detail.innerHTML = `<p class="muted" style="margin:0">Re-runs and manager overrides work in the local demo (<code>switchllm demo</code>).</p>`; return; }
+  const o = fb.option;
+  if (!o) { detail.innerHTML = `<p class="muted" style="margin:0">${esc(fb.message)}</p>`; return; }
+  detail.innerHTML = `<div class="fb-offer">
+    <div><b>Re-run on ${esc(o.model)}</b> (${esc(TIER_NAME[o.tier])}), about ${usdReq(o.est_cost_usd)}.
+      ${o.needs_approval ? `<span class="status warn">${ICON.no} Needs manager approval</span>` : `<span class="status good">${ICON.ok} Runs now</span>`}
+      <span class="muted" style="display:block;font-size:12px">${esc(o.why)}</span></div>
+    <label class="sr-only" for="fb-reason">Reason</label>
+    <input id="fb-reason" maxlength="300" placeholder="${o.needs_approval ? "Why does this need a stronger model? (sent to your manager)" : "What was wrong? (optional)"}">
+    <div class="fb-actions"><button class="btn-primary" type="button" id="fb-go">${o.needs_approval ? "Ask my manager" : "Re-run now"}</button></div></div>`;
+  $("#fb-go").addEventListener("click", async () => {
+    const btn = $("#fb-go"); btn.disabled = true; btn.textContent = o.needs_approval ? "Sending…" : "Re-running…";
+    try {
+      const out = await api.override(res.receipt.id, $("#fb-reason").value.trim());
+      S.dash = null;
+      if (out.status === "done") { S.last = out.run; await playRoute(out.run, true); toast(`Re-ran on ${o.model}.`); }
+      else { detail.innerHTML = `<p style="margin:0"><span class="status warn">${ICON.info} Sent for approval.</span> A manager can approve it on the Policy tab.</p>`; toast("Override request sent to a manager."); }
+    } catch (e) { btn.disabled = false; btn.textContent = "Try again"; toast(e.message); }
+  });
+}
+
+async function renderApprovals() {
+  const box = $("#approvals");
+  let list = [];
+  try { list = await api.approvals(); } catch (e) { box.innerHTML = `<p class="empty">${esc(e.message)}</p>`; return; }
+  const pending = list.filter(a => a.status === "pending").length;
+  $("#appr-count").textContent = pending ? `${pending} waiting` : "";
+  if (!list.length) {
+    box.innerHTML = `<p class="empty">No requests. When an employee rejects an answer and the next model is above their team's cap or budget, the request lands here.</p>`;
+    return;
+  }
+  box.innerHTML = list.map(a => `<div class="appr-item">
+      <div class="what"><b>${esc(a.user)}</b> · ${esc(roleLabel(a.role))} wants ${esc(a.to_model)} instead of ${esc(a.from_model)}
+        <span>${esc(a.task)}</span>
+        <span>${esc(a.why)} · about ${usdReq(a.est_cost_usd)}${a.reason ? ` · “${esc(a.reason)}”` : ""}</span></div>
+      <div class="acts">${a.status === "pending"
+        ? `<button class="btn-primary" type="button" data-id="${esc(a.id)}" data-ok="1">Approve</button><button class="btn-ghost" type="button" data-id="${esc(a.id)}" data-ok="0">Deny</button>`
+        : `<span class="status ${a.status === "approved" ? "good" : "crit"}">${a.status === "approved" ? ICON.ok : ICON.block} ${esc(a.status)}${a.decided_by ? ` by ${esc(a.decided_by)}` : ""}</span>`}</div>
+    </div>`).join("");
+  for (const b of $$("#approvals button")) b.addEventListener("click", () => decideApproval(b.dataset.id, b.dataset.ok === "1"));
+}
+
+async function decideApproval(id, approve) {
+  $$("#approvals button").forEach(b => { b.disabled = true; });
+  try {
+    const out = await api.decide(id, approve, "Manager");
+    S.dash = null;
+    await renderApprovals();
+    if (out.run) { toast("Approved. Showing the re-run answer."); setTab("ask"); S.last = out.run; await playRoute(out.run, true); }
+    else toast("Request denied.");
+  } catch (e) { toast(e.message); await renderApprovals(); }
 }
 
 function renderReceipt(res, animate) {
@@ -1231,6 +1342,7 @@ async function renderPolicy(force) {
     bud.appendChild(div);
   }
   // history
+  renderApprovals();
   const hist = $("#history");
   hist.innerHTML = `<li><span class="ver">v1</span><span>Default policy: 30 task types, 7 teams</span></li>` +
     (P.history || []).map(h => `<li><span class="ver">v${h.version}</span><span>${esc(h.instruction)}<br><span class="muted" style="font-size:12px">${h.actions.map(esc).join("; ")}</span></span></li>`).join("");
