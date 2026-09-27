@@ -72,3 +72,23 @@ def test_provider_allow_list(policy):
     role = replace(policy.roles["general"], providers=frozenset({"nobody"}))
     with pytest.raises(PolicyError, match="no permitted models"):
         route(policy, role, profile(), user="x")
+
+
+def test_run_rate_pacing_steps_down_before_the_cap(policy):
+    role = policy.roles["quant_research"]  # $500 budget
+    hard = profile("analysis", 5)
+    # $180 spent a third of the way into the month projects to $540: over the cap.
+    paced = route(policy, role, hard, user="a", month_spend_usd=180, month_progress=1 / 3)
+    assert paced.effort is Effort.LOW and paced.model.tier == 2
+    assert any("on pace for $540.00 of $500.00" in r for r in paced.reasons)
+    # Same spend at month end projects to $200: no change.
+    calm = route(policy, role, hard, user="a", month_spend_usd=200, month_progress=1.0)
+    assert calm.effort is Effort.HIGH and calm.model.tier == 3
+    # Far over pace: floor tier only.
+    floor = route(policy, role, hard, user="a", month_spend_usd=300, month_progress=0.25)
+    assert floor.model.tier == 1 and floor.escalation == []
+
+
+def test_pacing_never_breaks_a_quality_floor(policy):
+    d = route(policy, policy.roles["sales"], profile("legal", 3), user="b", month_spend_usd=40, month_progress=0.2)
+    assert d.model.tier == 3

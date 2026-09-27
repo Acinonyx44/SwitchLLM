@@ -4,7 +4,7 @@ Order of precedence, each step recorded as a human-readable reason:
   1. difficulty picks a starting tier and effort
   2. the task class's quality floor can raise the tier
   3. the role's caps can lower tier and effort -- never below the floor
-  4. the role's monthly budget throttles effort, then tier
+  4. the role's monthly budget, paced by run rate, throttles effort, then tier
   5. urgency and task shape pick the execution mode
 """
 
@@ -19,7 +19,8 @@ from .policy import Policy, PolicyError, Role
 
 _TIER_FOR_DIFFICULTY = {1: 1, 2: 1, 3: 2, 4: 3, 5: 3}
 _EFFORT_FOR_DIFFICULTY = {1: Effort.LOW, 2: Effort.LOW, 3: Effort.MEDIUM, 4: Effort.HIGH, 5: Effort.HIGH}
-BUDGET_THROTTLE_AT = 0.8
+# Projected month-end spend / budget at which routing steps down.
+PACE_EFFORT_AT, PACE_TIER_AT, PACE_FLOOR_AT = 0.9, 1.0, 1.2
 
 
 @dataclass
@@ -66,6 +67,7 @@ def route(
     *,
     user: str,
     month_spend_usd: float = 0.0,
+    month_progress: float = 1.0,
     urgency: str = "interactive",
 ) -> RouteDecision:
     reasons: list[str] = []
@@ -93,13 +95,25 @@ def route(
         reasons.append(f"role '{role.name}' is capped at {effort.value} effort")
 
     if role.monthly_budget_usd is not None:
-        used = month_spend_usd / role.monthly_budget_usd if role.monthly_budget_usd > 0 else 1.0
+        budget = role.monthly_budget_usd
+        used = month_spend_usd / budget if budget > 0 else 1.0
+        # Pace by run rate: project month-end spend and step down early.
+        projected = month_spend_usd / max(month_progress, 1e-6)
+        pace = projected / budget if budget > 0 else float("inf")
+        on_pace = f"on pace for ${projected:.2f} of ${budget:.2f}"
         if used >= 1.0:
             tier, ceiling, effort = floor, floor, Effort.LOW
             reasons.append(f"monthly budget exhausted (${month_spend_usd:.2f}) -> floor tier, low effort")
-        elif used >= BUDGET_THROTTLE_AT and effort.rank > Effort.MEDIUM.rank:
+        elif pace >= PACE_FLOOR_AT:
+            tier, ceiling, effort = floor, floor, Effort.LOW
+            reasons.append(f"{on_pace} -> floor tier, low effort")
+        elif pace >= PACE_TIER_AT:
+            ceiling = max(floor, ceiling - 1)
+            tier, effort = max(floor, min(tier, ceiling)), Effort.LOW
+            reasons.append(f"{on_pace} -> low effort, top tier held back")
+        elif pace >= PACE_EFFORT_AT and effort.rank > Effort.MEDIUM.rank:
             effort = Effort.MEDIUM
-            reasons.append(f"{used:.0%} of monthly budget used -> effort throttled to medium")
+            reasons.append(f"{on_pace} -> effort throttled to medium")
 
     mode = _pick_mode(role, profile, effort, urgency)
     if mode is not Mode.SINGLE:

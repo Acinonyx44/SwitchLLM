@@ -149,6 +149,12 @@ def test_server_sessions_are_isolated(engine_factory):
         assert call(b, "/api/policy")["version"] == 1  # another viewer is unaffected
         r = call(b, "/api/ask", {"persona": "priya", "task": "Reply to this customer: where is my order?", "compare": False})
         assert r["status"] == "ok"
+        rid = r["receipt"]["id"]
+        assert call(b, "/api/feedback", {"receipt_id": rid, "liked": False})["option"]["tier"] == "medium"
+        up = call(b, "/api/override", {"receipt_id": rid, "reason": "too vague"})["run"]["receipt"]["id"]
+        pending = call(b, "/api/override", {"receipt_id": up, "reason": "VIP"})
+        assert pending["status"] == "pending" and call(a, "/api/approvals") == []  # per-viewer queue
+        assert call(b, "/api/approvals/decide", {"id": pending["approval"]["id"], "approve": True})["run"]["status"] == "ok"
         with pytest.raises(urllib.error.HTTPError) as err:
             call(b, "/api/ask", {"persona": "nobody", "task": "hi"})
         assert err.value.code == 400
@@ -156,3 +162,56 @@ def test_server_sessions_are_isolated(engine_factory):
     finally:
         server.shutdown()
         server.server_close()
+
+
+def test_pacing_by_run_rate(engine):
+    from switchllm.console.pacing import apply, pace
+
+    p = pace(spent=55, cap=100, today=date(2026, 9, 15))  # on pace for $110
+    assert p["action"] == "tier" and p["projected"] == 110.0
+    cell = resolve(DEFAULT_POLICY, "engineer", "code_generate")
+    paced = apply(cell, p)
+    assert paced["effort"] == "low" and paced["ceiling"] == "medium" and paced["layers"][-1] == "budget.pacing"
+    assert apply(resolve(DEFAULT_POLICY, "legal", "legal_clause_analysis"), pace(90, 100, date(2026, 9, 5)))["floor"] == "large"
+
+    engine.apply("Cap engineers at $85 a month")
+    r = engine.ask("dana", "Write a Python function merge_intervals(intervals) that merges overlapping intervals, with a few tests.")
+    assert r["pacing"]["action"] != "none" and "budget.pacing" in r["receipt"]["applied"]
+
+
+def test_feedback_self_serve_rerun_then_manager_approval(engine):
+    r = engine.ask("priya", "Reply to this customer: where is my order?")
+    assert r["receipt"]["final_tier"] == "small"
+    fb = engine.feedback(r["receipt"]["id"], liked=False)
+    assert fb["option"]["tier"] == "medium" and not fb["option"]["needs_approval"]
+    rerun = engine.request_override(r["receipt"]["id"], "too generic")
+    assert rerun["status"] == "done" and rerun["run"]["receipt"]["final_tier"] == "medium"
+    assert rerun["run"]["receipt"]["override"]["kind"] == "self"
+
+    # Support is capped at medium for replies, so frontier needs a manager.
+    second = rerun["run"]["receipt"]["id"]
+    assert engine.feedback(second, liked=False)["option"]["needs_approval"]
+    pending = engine.request_override(second, "VIP customer")
+    assert pending["status"] == "pending"
+    with pytest.raises(ValueError):
+        engine.request_override(second, "again")  # one open request per answer
+    assert engine.approvals_view()[0]["status"] == "pending"
+    out = engine.decide(pending["approval"]["id"], approve=True, approver="Support lead")
+    assert out["run"]["receipt"]["final_tier"] == "large"
+    assert out["run"]["receipt"]["override"] == {"kind": "manager", "by": "Support lead", "reason": "VIP customer",
+                                                 "from": second, "approval": pending["approval"]["id"]}
+    with pytest.raises(ValueError):
+        engine.decide(pending["approval"]["id"], approve=True)
+    kpis = engine.dashboard()["kpis"]
+    assert kpis["disliked"] == 2 and kpis["overrides"] == 2 and kpis["pending_approvals"] == 0
+
+
+def test_denied_override_and_top_tier(engine):
+    r = engine.ask("leo", "Explain the risk to us in this clause: \"Vendor's total liability shall not exceed the fees paid by Customer in the twelve (12) months preceding the claim.\"")
+    fb = engine.feedback(r["receipt"]["id"], liked=False)
+    assert fb["option"] is None and "strongest" in fb["message"]
+    assert engine.feedback(r["receipt"]["id"], liked=True)["option"] is None
+    r = engine.ask("sam", "Draft a short email asking the vendor to resend the Q3 invoice with our PO number.")
+    second = engine.request_override(engine.request_override(r["receipt"]["id"])["run"]["receipt"]["id"])
+    assert second["status"] == "pending"  # contractors are capped at medium
+    assert engine.decide(second["approval"]["id"], approve=False)["approval"]["status"] == "denied"

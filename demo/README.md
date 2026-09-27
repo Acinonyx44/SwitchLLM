@@ -12,6 +12,12 @@ The Console shows SwitchLLM from all three seats:
   the YAML diff and the teams and task types it affects. It then replays 30
   days of company traffic, about 44,000 requests, to price the change before
   you apply it.
+- **Budget pacing and overrides:** each team's spend is projected to month
+  end. A team on pace to overshoot its cap is stepped down early: effort
+  first, then the top tier. Employees can reject an answer and re-run it one
+  tier up. Within policy the re-run happens immediately. Above the cap it goes
+  to a manager, who approves or denies it in the Override requests card on
+  the Policy tab.
 - **Savings (CIO):** spend compared with always-frontier by team and task
   type, budgets month to date, and every request sent from the Ask tab.
 

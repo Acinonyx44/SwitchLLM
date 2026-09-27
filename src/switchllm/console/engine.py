@@ -18,7 +18,7 @@ from datetime import date, datetime, timezone
 from importlib import resources
 from typing import Any
 
-from . import classifier, traffic
+from . import classifier, pacing, traffic
 from .live import LiveClient, parse_json
 from .nlpolicy import parse as parse_instruction
 from .policy import (DEFAULT_POLICY, MATRIX_CLASSES, TIERS, budget_for, clamp_tier, known_classes,
@@ -95,6 +95,8 @@ class ConsoleEngine:
         self.version = 1
         self.history: list[dict] = []
         self.session: list[dict] = []  # receipts from the Ask view
+        self.approvals: list[dict] = []  # override requests waiting on a manager
+        self._asks: dict[str, dict] = {}  # receipt id -> what was asked, for re-runs
         return self.meta()
 
     @property
@@ -128,7 +130,10 @@ class ConsoleEngine:
 
     # -- ask ----------------------------------------------------------------------
 
-    def ask(self, persona_id: str, task: str, compare: bool = False) -> dict[str, Any]:
+    def ask(self, persona_id: str, task: str, compare: bool = False,
+            force_tier: str | None = None, override: dict | None = None) -> dict[str, Any]:
+        """Route and answer a request. `force_tier` + `override` re-run it on a
+        chosen tier after feedback, self-serve or manager-approved."""
         persona = next((p for p in self.personas if p["id"] == persona_id), None)
         if persona is None:
             raise ValueError(f"unknown persona {persona_id!r}")
@@ -162,8 +167,11 @@ class ConsoleEngine:
         receipt = self._receipt_base(persona, role, cls, task)
         receipt["steps"] = steps
         budget = {"limit": budget_for(self.policy, role), "spent": round(self._spent_mtd().get(role, 0.0), 4)}
+        pace = pacing.pace(budget["spent"], budget["limit"], self.today)
+        pace["message"] = pacing.describe(pace, self.role_labels.get(role, role))
         base = {"persona": persona_id, "role": role, "task": task, "policy_version": self.version,
-                "ladder": self.ladder, "answer_kind": answer_kind, "classification": cls, "budget": budget}
+                "ladder": self.ladder, "answer_kind": answer_kind, "classification": cls, "budget": budget,
+                "pacing": pace}
 
         if cell["blocked"]:
             receipt.update(plan=self._plan(resolve(self.policy, "default", cls["task_class"])),
@@ -173,11 +181,20 @@ class ConsoleEngine:
             self._record(receipt)
             return {**base, "status": "blocked", "receipt": receipt,
                     "message": f"role '{role}' is not allowed to run task class '{cls['task_class']}'"}
-        if budget["spent"] >= budget["limit"] > 0:
+        if budget["spent"] >= budget["limit"] > 0 and not (override and override.get("kind") == "manager"):
             return {**base, "status": "budget",
                     "message": f"{self.role_labels.get(role, role)} have used ${budget['spent']:.2f} of their "
                                f"${budget['limit']:.2f} monthly budget. An admin can raise it on the Policy tab."}
 
+        policy_ceiling = cell["ceiling"]
+        if force_tier:
+            if force_tier not in TIERS:
+                raise ValueError(f"unknown tier {force_tier!r}")
+            cell = {**cell, "floor": force_tier, "ceiling": force_tier,
+                    "layers": [*cell["layers"], f"override.{override['kind'] if override else 'self'}"]}
+            receipt["override"] = override or {"kind": "self"}
+        else:
+            cell = pacing.apply(cell, pace)
         plan = self._plan(cell)
         start = clamp_tier(cls["difficulty"], cell["floor"], cell["ceiling"])
         receipt.update(plan=plan, applied=cell["layers"], start_tier=start)
@@ -208,6 +225,9 @@ class ConsoleEngine:
             latency_ms=sum(s["latency_ms"] for s in steps),
         )
         self._record(receipt)
+        self._asks[receipt["id"]] = {"persona": persona_id, "task": task, "role": role,
+                                     "task_class": cls["task_class"], "policy_ceiling": policy_ceiling,
+                                     "worker": worker}
         out = {**base, "answer_kind": answer_kind, "status": "ok", "answer": answer, "receipt": receipt}
         if fallback_reason and answer_kind == "fallback":
             out["fallback_reason"] = fallback_reason
@@ -351,6 +371,88 @@ class ConsoleEngine:
 
     def _record(self, receipt: dict) -> None:
         self.session.append(receipt)
+
+    # -- feedback and overrides -----------------------------------------------------------
+
+    def _receipt(self, receipt_id: str) -> dict:
+        rec = next((r for r in self.session if r["id"] == receipt_id), None)
+        if rec is None or receipt_id not in self._asks:
+            raise ValueError("unknown or expired request; route it again")
+        return rec
+
+    def _override_option(self, receipt_id: str) -> dict[str, Any] | None:
+        """The next tier up for a disliked answer, and whether it needs a manager."""
+        rec, asked = self._receipt(receipt_id), self._asks[receipt_id]
+        if rec["final_tier"] not in TIERS or rec["final_tier"] == TIERS[-1]:
+            return None
+        tier = TIERS[tier_index(rec["final_tier"]) + 1]
+        model = self._model(tier)
+        role = asked["role"]
+        spent = self._spent_mtd().get(role, 0.0)
+        cap = budget_for(self.policy, role)
+        pace = pacing.pace(spent, cap, self.today)
+        label = self.role_labels.get(role, role)
+        if tier_index(tier) > tier_index(asked["policy_ceiling"]):
+            why = f"{model['name']} is above what policy allows {label} for this task"
+        elif spent >= cap > 0:
+            why = f"{label} have used their ${cap:,.2f} monthly budget"
+        elif pace["action"] != "none":
+            why = f"{label} are on pace to exceed their ${cap:,.2f} cap"
+        else:
+            why = ""
+        w = asked["worker"]
+        return {"tier": tier, "model": model["name"], "needs_approval": bool(why),
+                "why": why or f"within the {label} policy",
+                "est_cost_usd": self._price(model, w["in_tokens"], w["out_tokens"])}
+
+    def feedback(self, receipt_id: str, liked: bool, comment: str = "") -> dict[str, Any]:
+        rec = self._receipt(receipt_id)
+        rec["feedback"] = {"liked": bool(liked), "comment": comment[:500]}
+        option = None if liked else self._override_option(receipt_id)
+        return {"receipt_id": receipt_id, "liked": bool(liked), "option": option,
+                "message": "" if liked or option else "This answer already came from the strongest model."}
+
+    def request_override(self, receipt_id: str, reason: str = "") -> dict[str, Any]:
+        option = self._override_option(receipt_id)
+        if option is None:
+            raise ValueError("this answer already came from the strongest model")
+        asked, rec = self._asks[receipt_id], self._receipt(receipt_id)
+        if not option["needs_approval"]:
+            run = self.ask(asked["persona"], asked["task"], force_tier=option["tier"],
+                           override={"kind": "self", "by": rec["user"], "reason": reason, "from": receipt_id})
+            return {"status": "done", "run": run}
+        if any(a["receipt_id"] == receipt_id and a["status"] == "pending" for a in self.approvals):
+            raise ValueError("a manager is already reviewing this request")
+        self._counter += 1
+        approval = {"id": hashlib.sha256(f"appr|{self._counter}|{receipt_id}".encode()).hexdigest()[:10],
+                    "receipt_id": receipt_id, "ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                    "user": rec["user"], "persona": asked["persona"], "role": asked["role"],
+                    "task_class": asked["task_class"], "task": rec["task_preview"],
+                    "from_model": rec["final_model"], "from_tier": rec["final_tier"],
+                    "to_model": option["model"], "to_tier": option["tier"], "why": option["why"],
+                    "est_cost_usd": option["est_cost_usd"], "reason": reason[:500], "status": "pending"}
+        self.approvals.append(approval)
+        return {"status": "pending", "approval": approval}
+
+    def approvals_view(self) -> list[dict[str, Any]]:
+        return list(reversed(self.approvals))
+
+    def decide(self, approval_id: str, approve: bool, approver: str = "Manager") -> dict[str, Any]:
+        approval = next((a for a in self.approvals if a["id"] == approval_id), None)
+        if approval is None:
+            raise ValueError("unknown approval request")
+        if approval["status"] != "pending":
+            raise ValueError(f"already {approval['status']}")
+        approval.update(status="approved" if approve else "denied", decided_by=approver,
+                        decided_at=datetime.now(timezone.utc).isoformat(timespec="seconds"))
+        out: dict[str, Any] = {"approval": approval}
+        if approve:
+            asked = self._asks[approval["receipt_id"]]
+            out["run"] = self.ask(asked["persona"], asked["task"], force_tier=approval["to_tier"],
+                                  override={"kind": "manager", "by": approver, "reason": approval["reason"],
+                                            "from": approval["receipt_id"], "approval": approval_id})
+            approval["run_receipt"] = out["run"]["receipt"]["id"]
+        return out
 
     # -- policy -----------------------------------------------------------------------
 
@@ -497,7 +599,11 @@ class ConsoleEngine:
                      "escalation_rate": round(100 * escalated / total, 1) if total else 0.0,
                      "escalated": escalated, "blocked": blocked,
                      "verified_pass_rate": round(100 * passed / verified, 1) if verified else 0.0,
-                     "per_employee_saved": round((base - cost) / employees, 2)},
+                     "per_employee_saved": round((base - cost) / employees, 2),
+                     "liked": sum(1 for r in self.session if (r.get("feedback") or {}).get("liked") is True),
+                     "disliked": sum(1 for r in self.session if (r.get("feedback") or {}).get("liked") is False),
+                     "overrides": sum(1 for r in self.session if r.get("override")),
+                     "pending_approvals": sum(1 for a in self.approvals if a["status"] == "pending")},
             "series": series,
             "roles": sorted(({"role": r, "label": self.role_labels.get(r, r), "headcount": traffic.HEADCOUNT[r],
                               "requests": v["requests"], "cost": round(v["cost"], 2), "baseline": round(v["baseline"], 2),
@@ -515,7 +621,8 @@ class ConsoleEngine:
                         "task_class": r["task_class"], "status": r["status"], "model": r["final_model"],
                         "tier": r["final_tier"], "effort": r["plan"]["effort"], "execution": r["plan"]["execution"],
                         "escalations": r.get("escalations", 0), "cost": r["cost_usd"], "baseline": r["baseline_cost_usd"],
-                        "saved_pct": pct(r["cost_usd"], r["baseline_cost_usd"]), "task": r["task_preview"]}
+                        "saved_pct": pct(r["cost_usd"], r["baseline_cost_usd"]), "task": r["task_preview"],
+                        "override": (r.get("override") or {}).get("kind")}
                        for r in reversed(self.session[-12:])],
             "pool": {"name": self.pool["name"], "baseline": self.pool["baseline"]},
             "policy_version": self.version,

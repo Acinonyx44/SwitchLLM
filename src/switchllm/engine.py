@@ -3,6 +3,7 @@ attach a cost receipt, and write the audit record."""
 
 from __future__ import annotations
 
+import calendar
 import hashlib
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
@@ -88,7 +89,10 @@ class SwitchLLM:
     def explain(self, user: str, prompt: str, urgency: str = "interactive") -> RouteDecision:
         role = self.role_for(user)
         spend = self.month_spend(user) if role.monthly_budget_usd is not None else 0.0
-        return route(self.policy, role, classify(prompt), user=user, month_spend_usd=spend, urgency=urgency)
+        now = self._now()
+        progress = now.day / calendar.monthrange(now.year, now.month)[1]
+        return route(self.policy, role, classify(prompt), user=user, month_spend_usd=spend,
+                     month_progress=progress, urgency=urgency)
 
     def run(
         self,

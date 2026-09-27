@@ -54,9 +54,11 @@ keyless mock provider:
 3. **Role caps lower it, but never below the floor.** For example, `sales`
    tops out at tier 2 and medium effort. When the floor and the cap conflict,
    the floor wins and the audit log records the override.
-4. **Budgets throttle.** At 80% of a user's monthly budget, effort drops to
-   medium. At 100%, requests run at the floor tier with low effort and no
-   escalation.
+4. **Budgets are paced by run rate.** SwitchLLM projects month-end spend from
+   the spend so far. When the projection reaches 90% of the budget, effort
+   drops to medium. At 100%, effort drops to low and the top tier is held
+   back. At 120%, requests run on the floor tier. Once the budget is used up,
+   requests run on the floor tier with low effort and no escalation.
 5. **Mode.** `batch` applies when the caller marks the task non-urgent, the
    role allows it, and the vendor discount applies. `agentic` applies when the
    task needs tools. `extended_thinking` applies to hard, high-effort tasks.
@@ -64,6 +66,14 @@ keyless mock provider:
 6. **Escalation.** If the verifier's confidence falls below the threshold, the
    task is retried one tier up, until it is accepted or reaches the role's
    ceiling. If nothing passes, the answer is marked unverified.
+
+### Feedback and overrides (Console)
+
+Employees can mark an answer as not good enough. If the next tier up is within
+their role's policy, the request re-runs on it immediately. If it's above the
+role's cap, or the team is over budget or on pace to exceed it, the request
+goes to a manager's approval queue on the Policy tab. Every override, with who
+approved it and why, is recorded on the receipt.
 
 ### Shadow mode
 

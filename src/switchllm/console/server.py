@@ -149,6 +149,8 @@ class Handler(BaseHTTPRequestHandler):
             self._with_engine(lambda e: e.policy_view())
         elif path == "/api/dashboard":
             self._with_engine(lambda e: e.dashboard())
+        elif path == "/api/approvals":
+            self._with_engine(lambda e: e.approvals_view())
         else:
             self._json(HTTPStatus.NOT_FOUND, {"detail": "not found"})
 
@@ -166,6 +168,15 @@ class Handler(BaseHTTPRequestHandler):
             self._with_engine(lambda e: e.preview(str(body.get("instruction", ""))[:500]))
         elif path == "/api/policy/apply":
             self._with_engine(lambda e: e.apply(str(body.get("instruction", ""))[:500]))
+        elif path == "/api/feedback":
+            self._with_engine(lambda e: e.feedback(str(body.get("receipt_id", "")), bool(body.get("liked")),
+                                                   str(body.get("comment", ""))))
+        elif path == "/api/override":
+            self._with_engine(lambda e: e.request_override(str(body.get("receipt_id", "")),
+                                                           str(body.get("reason", ""))))
+        elif path == "/api/approvals/decide":
+            self._with_engine(lambda e: e.decide(str(body.get("id", "")), bool(body.get("approve")),
+                                                 str(body.get("approver") or "Manager")[:80]))
         elif path == "/api/reset":
             self._with_engine(lambda e: e.reset(body.get("ladder")))
         else:
